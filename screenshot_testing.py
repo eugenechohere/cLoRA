@@ -28,7 +28,7 @@ class ScreenshotCapture:
             img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             # Resize to 1080p height, maintain aspect ratio
             height, width = img.shape[:2]
-            target_height = 1080
+            target_height = 720
             scale = target_height / height
             new_width = int(width * scale)
             img_resized = cv2.resize(img, (new_width, target_height), interpolation=cv2.INTER_LANCZOS4)
