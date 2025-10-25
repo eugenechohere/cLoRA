@@ -19,7 +19,7 @@ def take_screenshot_after_delay():
     global count
     time.sleep(0.1)  # Wait 100ms
     with mss.mss() as sct:
-        screenshot = sct.grab(sct.monitors[1])
+        screenshot = sct.grab(sct.monitors[0])
         filename = output_dir / f"screenshot_{count:04d}.png"
         mss.tools.to_png(screenshot.rgb, screenshot.size, output=str(filename))
         print(f"Saved: screenshot_{count:04d}.png")
