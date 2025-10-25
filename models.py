@@ -26,6 +26,10 @@ class OpenAIClient:
             raise ValueError("API key must be provided or set in OPENAI_API_KEY environment variable")
         
         self.base_url = base_url.rstrip("/")
+
+        self.groq_base_url = "https://api.groq.com/openai/v1"
+        self.groq_api_key = os.getenv("GROQ_API_KEY", None)
+
         self._session: Optional[aiohttp.ClientSession] = None
     
     async def __aenter__(self):
@@ -179,11 +183,59 @@ class OpenAIClient:
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
         
-        url = f"{self.base_url}/chat/completions"
+        # Route to Groq API if model name contains a slash
+        if "/" in model:
+            if not self.groq_api_key:
+                raise ValueError("GROQ_API_KEY environment variable must be set to use Groq models")
+            url = f"{self.groq_base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.groq_api_key}",
+                "Content-Type": "application/json"
+            }
+        else:
+            url = f"{self.base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
         
-        async with self._session.post(url, json=payload) as response:
+        async with self._session.post(url, json=payload, headers=headers) as response:
             response.raise_for_status()
             return await response.json()
+    
+    async def simple_text_completion(
+        self,
+        model: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Make a simple text-only chat completion request.
+        
+        Args:
+            model: Model name
+            prompt: User prompt
+            system_prompt: Optional system prompt
+            **kwargs: Additional parameters to pass to chat_completion
+            
+        Returns:
+            API response dictionary
+        """
+        messages = []
+        
+        if system_prompt:
+            messages.append({
+                "role": "system",
+                "content": system_prompt
+            })
+        
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
+        
+        return await self.chat_completion(model=model, messages=messages, **kwargs)
      
     @staticmethod
     def extract_text_from_response(response: Dict[str, Any]) -> str:
