@@ -287,25 +287,23 @@ async def example_usage():
     # Initialize client (will use OPENAI_API_KEY from environment)
     async with OpenAIClient() as client:
         
+        dir = "imgs/random_highlights"
 
-        dir = "imgs/slack_dm"
         # Example 3: Chat with multiple images from file paths
         # (Uncomment if you have local images)
         print("Example 3: Chat with multiple local images")
         response = await client.chat_with_images(
-            model="gpt-5-chat-latest",
+            model="gpt-5",
             text="Provided is a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifcally. Please be as descriptive as possible, being explicit about each action taken",
-            images=[f"{dir}/img_{i}.png" for i in range(1,6)],
-            detail="high",
-            max_tokens=500
+            images=[f"{dir}/screenshot_000{i}.png" for i in range(0,9)],
+            detail="auto",
+            reasoning_effort="low",
         )
 
         print(client.extract_text_from_response(response))
         print()
         
    
-
-
 if __name__ == "__main__":
     asyncio.run(example_usage())
 
