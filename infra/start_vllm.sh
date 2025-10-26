@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # for vllm, we use gpu=0
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 
 # by default, serve the og model. But on a per-request basis, we pass in the lora adapters path for inference.
