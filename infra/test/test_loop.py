@@ -19,7 +19,7 @@ def train_and_update(data_path):
         return None
 
 def main():
-    data_path = "data/batch.jsonl"
+    data_path = '/home/ubuntu/calhacks-continual-learning/infra/data/batch_256_hehe.jsonl'
     num_iterations = 1  # Number of times to run the loop
     delay_seconds = 1  # Delay between iterations (in seconds)
     

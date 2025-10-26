@@ -13,8 +13,10 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
     
     model_name = "Qwen/Qwen3-8B"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token
-    
+    # tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+
+
     base_model = AutoLigerKernelForCausalLM.from_pretrained(
         model_name, 
         dtype=torch.bfloat16,
@@ -32,7 +34,7 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
         print("Starting fresh LoRA training")
         lora_config = LoraConfig(
             r=8,
-            lora_alpha=32,
+            # lora_alpha=32,
             target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
             lora_dropout=0.05,
             bias="none",
@@ -55,7 +57,7 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
     def format_qa_pair(examples):
         """Convert Q&A pairs to Qwen chat format"""
         texts = []
-        for question, answer in zip(examples["prompt"], examples["completion"]):
+        for question, answer in zip(examples["question"], examples["answer"]):
             # Using Qwen's chat template format
             messages = [
                 {"role": "user", "content": question},
@@ -71,6 +73,7 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
         remove_columns=dataset.column_names,
         num_proc=4,
     )
+    print(dataset.to_pandas().iloc[0])
     
     def tokenize_function(examples):
         return tokenizer(
@@ -87,7 +90,7 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
         num_proc=4,
     )
     # TODO: finalize the design
-    tokenized_dataset = tokenized_dataset.select(range(640))
+    # tokenized_dataset = tokenized_dataset.select(range(256))
 
     
     data_collator = DataCollatorForLanguageModeling(
@@ -96,9 +99,11 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
         pad_to_multiple_of=8,
     )
     
+    # breakpoint()
+
     training_args = TrainingArguments(
         output_dir=output_path,
-        num_train_epochs=1,
+        num_train_epochs=4,
         per_device_train_batch_size=64,
         gradient_accumulation_steps=1,
         learning_rate=1e-3,
@@ -106,7 +111,7 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
         # warmup_ratio=0.03,
         lr_scheduler_type="cosine_with_min_lr",
         lr_scheduler_kwargs={
-            "min_lr": 1e-4,
+            "min_lr": 5e-4,
         },
         bf16=True,
         bf16_full_eval=True,
@@ -134,6 +139,9 @@ def train_lora(data_path: str, output_path: str, gpu_id: int = 0, base_adapter_p
         train_dataset=tokenized_dataset,
         data_collator=data_collator,
     )
+    sample_batch = data_collator([tokenized_dataset[i] for i in range(4)])
+
+    # breakpoint()
     trainer.train()
     # SJ: this only saves the PEFT weights (v small)
     model.save_pretrained(output_path)
@@ -150,7 +158,7 @@ if __name__ == "__main__":
     
     # # 
     train_lora(
-        'data/batch.jsonl',
+        '/home/ubuntu/calhacks-continual-learning/infra/data/batch_256_hehe.jsonl',
         output_path='lora_output',
         gpu_id=1,
         base_adapter_path=None,

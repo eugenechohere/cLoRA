@@ -56,7 +56,7 @@ async def train_and_update(request: TrainRequest):
     current_adapter_path = new_adapter_path
 
     # TODO: delete old_adapter path.
-    
+    # TODO: sample by using the adapter_name
     return {
         "status": "success",
         "adapter_name": adapter_name,

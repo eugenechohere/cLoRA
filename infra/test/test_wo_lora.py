@@ -6,16 +6,17 @@ client = OpenAI(
 )
 
 
+#         151645: AddedToken("<|im_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
 # ****Change model_id
 response = client.chat.completions.create(
-    model="82d0f1ec-7",
+    model="89165820-a",
     messages=[
-        {"role": "user", "content": "How did Eugene's activities on Spotify and YouTube relate to each other?"}
+        {"role": "user", "content": "hm... do you know when Eugene moved from YouTube to Slack, and what was the initial Slack view?"}
     ],
     extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     temperature=0.05,
     top_p=0.95,
-    max_tokens=1000,
+    max_tokens=200,
     # 6c1492fc-2
 )
 
