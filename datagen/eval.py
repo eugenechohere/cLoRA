@@ -122,18 +122,31 @@ async def run_evaluation():
             
             contexts.append(Context(time=avg_datetime, username="Eugene", content=client.extract_text_from_response(response)))
 
-
-
     models = [
         "openai/gpt-oss-120b",
         "moonshotai/kimi-k2-instruct-0905",
         "meta-llama/llama-4-maverick-17b-128e-instruct",
         "qwen/qwen3-32b",
     ]
-    result = await general_all_prompts(contexts, models, PROMPT_FRAGMENTS, repeats=10)
-    json.dump(result, open("synth_data.json", "w"))
+    result = await general_all_prompts(contexts, models, PROMPT_FRAGMENTS, repeats=5)
+    return result
+
+async def main(num_parallel_runs: int = 1):
+
+    results = await asyncio.gather(*[run_evaluation() for _ in range(num_parallel_runs)])
+    # Flatten the results: if results is a list of lists, flatten into a single list
+    flattened_results = []
+    for group in results:
+        if isinstance(group, list):
+            flattened_results.extend(group)
+        else:
+            flattened_results.append(group)
+
+        
+    json.dump(flattened_results, open("synth_data.json", "w"))
 
 
 if __name__ == "__main__":
 
-    asyncio.run(run_evaluation())
+    asyncio.run(main(2))
+
