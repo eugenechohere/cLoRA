@@ -124,7 +124,11 @@ class LiveDataProcessor(ScreenshotCapture):
         
     async def initialize_async(self):
         """Initialize async components."""
-        self.client = OpenAIClient()
+
+        if self.vlm_model == "claude-haiku-4-5":
+            self.client = OpenAIClient(api_key=os.environ["ANTHROPIC_API_KEY"], base_url="https://api.anthropic.com/v1")
+        else:
+            self.client = OpenAIClient()
         await self.client.__aenter__()
         self.conversation = ConversationManager(client=self.client)
         
@@ -486,7 +490,7 @@ if __name__ == "__main__":
     processor = LiveDataProcessor(
         username="Eugene",
         # vlm_model="gpt-5-chat-latest",
-        vlm_model="meta-llama/llama-4-maverick-17b-128e-instruct",
+        vlm_model="claude-haiku-4-5",
         qa_models=[
             "openai/gpt-oss-120b",
             "moonshotai/kimi-k2-instruct-0905",
