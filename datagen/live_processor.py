@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import requests
 from typing import Callable, Optional, List
 import os
 import dotenv
@@ -458,6 +459,17 @@ async def example_callback(data: List[dict]):
 
     json.dump(data, open(f"output/result_{index}.json", "w"))
     index += 1
+
+    # @app.post("/upload")
+    # async def upload_example(payloads: List[Dict[str, str]] = Body(...)) -> Dict[str, Any]:
+    # https://8d01de42c0ff.ngrok-free.app/
+
+    data = [{"prompt": item["question"], "completion": item["answer"]} for item in data]
+    result = requests.post("https://8d01de42c0ff.ngrok-free.app/upload", json=data, headers={
+        "Content-Type": "application/json", "ngrok-skip-browser-warning": "0"
+    })
+
+    print(result.json())
     
     print(f"\n{'='*80}\n")
 
