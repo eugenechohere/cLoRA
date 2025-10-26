@@ -1,0 +1,13 @@
+vllm
+transformers
+peft
+datasets
+torch
+fastapi
+uvicorn
+requests
+wheel 
+packaging 
+ninja
+flash-attn
+# pip install flash-attn --no-build-isolation
