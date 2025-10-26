@@ -1,24 +1,38 @@
-
+from glob import glob
 from models import OpenAIClient, ConversationManager
-import asyncio
+from generate_synth_data import Context, general_all_prompts, PROMPT_FRAGMENTS
+from datetime import datetime
+import os
+import json
+import asyncio 
 
-# Example usage
-async def example_usage():
-    
-    # Initialize client (will use OPENAI_API_KEY from environment)
+
+FIRST_TURN_PROMPT = "Provided is a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context including any relevant text present and UI elements that are present and deemed relevant to jot down, including actions and elements that don't explicitly impact the webpage, e.g. side UI elements,scrolling, text text being highlighted by the user, tool tips, button presses/button state changes, etc.. Please be as explicit and descriptive and verbose as possible about the current context. Just give the description without any other chatty text."
+TURN_PROMPT = "Here is a continuation of the previous sequence of actions, provided as a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context, including any relevant text present UI elements that are present and deemed relevant to jot down, including actions and elements that don't explicitly impact the webpage, e.g. side UI elements, scrolling, text being highlighted by the user, tool tips, button presses/button state changes, etc... Please be as explicit and descriptive and verbose as possible about the current context. In your description, do not repeat information or nuances that have already been mentioned in previous turns. Only describe new actions or changes that have been taken since."
+
+chunk_size = 3
+max_conv_chatbot_turns = 6
+dir = "datagen/imgs/eval"
+username = "Eugene"
+
+vlm_model = "gpt-5-chat-latest"
+qa_models = [
+    "openai/gpt-oss-120b",
+    "moonshotai/kimi-k2-instruct-0905",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "qwen/qwen3-32b",
+]
+
+
+async def run_loop():
+
+    contexts = []
 
     async with OpenAIClient() as client:
-        
-        dir = "output/20251025_155146_f7eee4a6"
-        chunk_size = 3
-
-        max_conv_chatbot_turns = 6
-
+ 
         conversation = ConversationManager(
             client=client,
         )
-
-        from glob import glob
 
         # Get all screenshot image paths, sorted
         image_paths = sorted(glob(f"{dir}/screenshot_*.png"))
@@ -27,16 +41,15 @@ async def example_usage():
         for i in range(0, len(image_paths), chunk_size):
             images = image_paths[i:i + chunk_size]
 
-            text = "Provided is a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context including any relevant text present. Just give the description without any other chatty text."
+            text = FIRST_TURN_PROMPT
             if i != 0:
-                text = "Here is a continuation of the previous sequence of actions, provided as a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context, including any relevant text present. In your description, do not repeat information or nuances that have already been mentioned in previous turns. Only describe new actions or changes that have been taken since."
+                text = TURN_PROMPT
 
             response = await conversation.send(
-                model="gpt-5-chat-latest",
+                model=vlm_model,
                 text=text,
                 images=images,
                 detail="auto",
-                # reasoning_effort="minimal"
             )
 
             conversation.messages[-2]["content"] = [{"type": "text", "text": f"Please provide a description of the new actions taken since the previous turn."}]
@@ -48,6 +61,32 @@ async def example_usage():
             print(f"{client.extract_text_from_response(response)}")
             print("--------------------------------")
 
-   
+            # Calculate average datetime from image file timestamps
+            image_timestamps = [os.path.getmtime(img_path) for img_path in images]
+            avg_timestamp = sum(image_timestamps) / len(image_timestamps)
+            avg_datetime = datetime.fromtimestamp(avg_timestamp)
+            
+            contexts.append(Context(time=avg_datetime, username=username, content=client.extract_text_from_response(response)))
+
+    result = await general_all_prompts(contexts, qa_models, PROMPT_FRAGMENTS, repeats=5)
+    return result
+
+async def main(num_parallel_runs: int = 1):
+
+    results = await asyncio.gather(*[run_loop() for _ in range(num_parallel_runs)])
+    # Flatten the results: if results is a list of lists, flatten into a single list
+    flattened_results = []
+    for group in results:
+        if isinstance(group, list):
+            flattened_results.extend(group)
+        else:
+            flattened_results.append(group)
+
+        
+    json.dump(flattened_results, open("synth_data.json", "w"))
+
+
 if __name__ == "__main__":
-    asyncio.run(example_usage())
+
+    asyncio.run(main(2))
+

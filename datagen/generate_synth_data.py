@@ -229,6 +229,9 @@ async def generate_synth_data(contexts: list[Context], model: str, prompt_style:
             top_p=0.99,
             **additional_kwargs
         )
+        
+        if response is None:
+            return []
 
         end_time = time.time()
         print(f"Time taken: {(end_time - start_time):.2f} seconds for model {model}")

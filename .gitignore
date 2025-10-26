@@ -6,5 +6,5 @@ __pycache__
 
 infra/lora_output/
 infra/data/
-infra/.venv
 infra/lora_adapters
+infra/.venv

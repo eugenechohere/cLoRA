@@ -200,8 +200,14 @@ class OpenAIClient:
             }
         
         async with self._session.post(url, json=payload, headers=headers) as response:
-            response.raise_for_status()
-            return await response.json()
+            for _ in range(10):
+                try:
+                    response.raise_for_status()
+                    return await response.json()
+                except Exception as e:
+                    print(f"Error: {e}")
+                    await asyncio.sleep(1)
+        return None
     
     async def simple_text_completion(
         self,
