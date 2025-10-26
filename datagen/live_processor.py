@@ -464,8 +464,15 @@ async def example_callback(data: List[dict]):
     # async def upload_example(payloads: List[Dict[str, str]] = Body(...)) -> Dict[str, Any]:
     # https://8d01de42c0ff.ngrok-free.app/
 
-    data = [{"prompt": item["question"], "completion": item["answer"]} for item in data]
-    result = requests.post("https://8d01de42c0ff.ngrok-free.app/upload", json=data, headers={
+    # data = [{"prompt": item["question"], "completion": item["answer"]} for item in data]
+    # make the data go up to 256 rows
+    diff_from_256 = 256 - len(data)
+    if diff_from_256 > 0:
+        data.extend(data[:diff_from_256])
+    if diff_from_256 < 0:
+        data = data[:256]
+
+    result = requests.post("https://calhacks-monitor-backend.ngrok.pizza/upload", json=data, headers={
         "Content-Type": "application/json", "ngrok-skip-browser-warning": "0"
     })
 
