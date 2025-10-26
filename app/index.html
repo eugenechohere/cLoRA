@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CalHacks Chatbot</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="drag-area">
+        <h1>cLoRA</h1>
+      </div>
+      <div class="header-buttons">
+        <button id="viewDataButton" class="header-button" title="View LoRA Data">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+            <line x1="9" y1="21" x2="9" y2="9"></line>
+          </svg>
+          <span>View Data</span>
+        </button>
+        <button id="newChatButton" class="header-button" title="New Chat">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New Chat</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Chat View -->
+    <div id="chatView" class="view-container">
+      <div class="chat-container" id="chatContainer">
+        <div class="welcome-message">
+          <p>👋 Hi! Ask me anything about your activities.</p>
+        </div>
+      </div>
+      
+      <div class="input-container">
+        <form id="messageForm">
+          <input 
+            type="text" 
+            id="messageInput" 
+            placeholder="Type your message..." 
+            autocomplete="off"
+          />
+          <button type="submit" id="sendButton">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Data View -->
+    <div id="dataView" class="view-container" style="display: none;">
+      <div class="data-controls">
+        <button id="backToChatButton" class="control-button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Chat
+        </button>
+        <button id="refreshDataButton" class="control-button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      
+      <div class="sheet-tabs" id="sheetTabs"></div>
+      
+      <div class="table-container" id="tableContainer">
+        <div class="loading-state">
+          <p>Click "Refresh" to load data</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="renderer.js"></script>
+</body>
+</html>
+
