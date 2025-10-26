@@ -11,3 +11,21 @@ packaging
 ninja
 flash-attn
 # pip install flash-attn --no-build-isolation
+annotated-doc
+annotated-types
+anyio
+certifi
+charset-normalizer
+click
+exceptiongroup
+fastapi
+h11
+idna
+pydantic
+pydantic_core
+sniffio
+starlette
+typing-inspection
+typing_extensions
+urllib3
+uvicorn
