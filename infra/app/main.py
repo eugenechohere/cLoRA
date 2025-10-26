@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import requests
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, HTTPException
+from pydantic import BaseModel
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,14 +15,18 @@ DATA_DIR = BASE_DIR / "data"
 RECENT_EXAMPLES_PATH = DATA_DIR / "recent_examples.jsonl"
 
 # Single source of truth for batch size
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 TRAIN_TRIGGER_THRESHOLD = BATCH_SIZE
-TRAINING_SERVICE_URL = "http://127.0.0.1:9000/train"
+TRAINING_SERVICE_URL = "http://0.0.0.0:8001/train-and-update"
+VLLM_URL = "http://0.0.0.0:8000/v1/completions"
 
 app = FastAPI()
 
+class InferenceRequest(BaseModel):
+    prompt: str
+
 @app.post("/upload")
-async def upload_example(payloads: List[Dict[str, Any]] = Body(...)) -> Dict[str, Any]:
+async def upload_example(payloads: List[Dict[str, str]] = Body(...)) -> Dict[str, Any]:
     """
     Append prompt/completion pairs and, whenever possible, emit as many full
     BATCH_SIZE training files as can be formed (each exactly BATCH_SIZE examples),
@@ -39,6 +44,7 @@ async def upload_example(payloads: List[Dict[str, Any]] = Body(...)) -> Dict[str
             RECENT_EXAMPLES_PATH, TRAIN_TRIGGER_THRESHOLD
         )
         print(train_files, remaining)
+        
 
         # Fire independent requests (no interactions among them)
         for batch_path in train_files:
@@ -63,13 +69,13 @@ def _trigger_training(train_file: Path) -> bool:
     Notify the training service about a ready-to-train file.
     Requests are independent; success for one does not depend on others.
     """
- 
+    print(f"Triggering training for {train_file}")
     response = requests.post(
         TRAINING_SERVICE_URL,
         json={
-            "train_file": str(train_file),
+            "data_path": str(train_file),
         },
-        timeout=5,
+        timeout=60,  # 10 minutes - training can take a while
     )
     response.raise_for_status()
     data = response.json()
@@ -142,3 +148,25 @@ def _prepare_training_batches(path: Path, batch_size: int) -> Tuple[List[Path], 
         h.writelines(remainder_lines)
 
     return batch_files, remainder_count
+
+
+@app.post("/infer")
+async def infer(request: InferenceRequest):
+    payload = {
+        "model": "Qwen/Qwen3-8B",
+        "prompt": request.prompt,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }
+
+    try:
+        resp = requests.post(VLLM_URL, json=payload, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        return {"output": data["choices"][0]["text"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8002)
