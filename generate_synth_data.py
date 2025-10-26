@@ -69,6 +69,7 @@ Style and content requirements (follow all of these):
      `### 1. What did Eugene do in Spotify around 11:40 PM?`
    * Then answer in normal text under it.
    * Write at least 12 questions unless the log is extremely tiny.
+   * Make sure to always provide **temporal context** to the question. For example specify the time/day the question is referring to or what happened before/after the question.
 
 3. **Answer style**
 
