@@ -72,9 +72,6 @@ Are these two values equivalent in meaning? Respond with only "YES" or "NO"."""
         return (is_equal, "model-judge")
 
 
-PROMPT = ""
-
-
 async def run_evaluation():
 
     contexts = []
