@@ -59,10 +59,6 @@ async def train_and_update(request: TrainRequest):
 async def get_current_adapter():
     return {"adapter_path": current_adapter_path}
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
