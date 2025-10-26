@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+import random
 import os
 import re
 import json
@@ -45,6 +46,7 @@ You must cover:
 
    **You MUST generate at least 20 questions.**
 """.strip(),
+    """**You must cover every single atomic piece of information by going through each sentence in sequence.** Include key information like timestamps, file names, button clicks, text highlighted, exact strings that appeared, commands that ran, etc."""
 ]
 
 PROMPT = """You are given an activity log describing what a single person did (the “user”). Your job is to act like a manager or close coworker who did NOT see those logs but wants to understand what happened.
@@ -126,6 +128,26 @@ Style and content requirements (follow all of these):
 After these instructions, you will receive a log of activity. Use ONLY that log to generate your Q&A.
 
 If a detail is not in the log, you MUST say you don’t see it in the log."""
+
+rephrase_prompt = """Rewrite the given question and answer into 5 more questions and answers. Feel free to shift around orderings of words and split up sentences (and also reorder sentences if it doesn't change meaning) etc.
+
+## Example
+Change the sentence ordering if it makes sense. For example:
+
+**Original**: Eugene opened a YouTube tab in the Arc browser showing a paused/playing interview where the speaker used a **RØDE microphone**. Subtitles displayed the line “similar to maybe what evolution has done. That’s why I call pre‑training.” He then switched to the Spotify desktop app, selected the **“Playlist – eugene”** (64 songs, 3 h 29 min) from the left sidebar, and started playback of **“SPEED UP” by BENJAMIN RICH**, which began at roughly 1:15 min into the track.
+
+**Rephrased**: In the Arc browser a YouTube video was opened by Eugene which showed a paused/playing interview. A **RØDE microphone** is being used by the speaker in the video. The line “similar to maybe what evolution has done. That’s why I call pre‑training” is shown on the video captions. Eugene then switched to the Spotify desktop app. On the left sidebar, he selected the **“Playlist – eugene”** and started playback of **“SPEED UP” by BENJAMIN RICH**. The song began at roughly 1:15 min into the track. Overall, the playlist has 64 songs and is 3 h 29 min in length.
+
+## Format
+Keep it in the format of
+
+Question Rephrase 1: <question>
+Answer Rephrase 1: <answer>
+...
+Question Rephrase 5: <question>
+Answer Rephrase 5: <answer>
+
+(No seperator)"""
 
 extract_prompt = """Here's a bunch of question and answer pairs. Extract the question and answer pairs and put them into a JSON list where the objects contain keys "question" and "answer":"""
 
@@ -211,6 +233,137 @@ async def generate_synth_data(contexts: list[Context], model: str, prompt_style:
         print(f"Time taken: {(end_time - start_time):.2f} seconds for model {model}")
         return parse_questions(client.extract_text_from_response(response))
 
+def normalize_unicode_to_normal(text: str) -> str:
+    """
+    Normalizes Unicode characters to their ASCII equivalents.
+    - Special apostrophes → '
+    - Special quotes → " or '
+    - Em/en dashes → -
+    - Unicode spaces → regular space
+    """
+    # Special apostrophes and right single quotes → '
+    text = text.replace('\u2019', "'")  # Right single quotation mark
+    text = text.replace('\u2018', "'")  # Left single quotation mark
+    text = text.replace('\u201B', "'")  # Single high-reversed-9 quotation mark
+    text = text.replace('\u02BC', "'")  # Modifier letter apostrophe
+    text = text.replace('\u2032', "'")  # Prime
+    
+    # Special double quotes → "
+    text = text.replace('\u201C', '"')  # Left double quotation mark
+    text = text.replace('\u201D', '"')  # Right double quotation mark
+    text = text.replace('\u201E', '"')  # Double low-9 quotation mark
+    text = text.replace('\u201F', '"')  # Double high-reversed-9 quotation mark
+    text = text.replace('\u2033', '"')  # Double prime
+    text = text.replace('\u00AB', '"')  # Left-pointing double angle quotation mark «
+    text = text.replace('\u00BB', '"')  # Right-pointing double angle quotation mark »
+    
+    # Em dash, en dash, and other dashes → -
+    text = text.replace('\u2014', '-')  # Em dash
+    text = text.replace('\u2013', '-')  # En dash
+    text = text.replace('\u2015', '-')  # Horizontal bar
+    text = text.replace('\u2212', '-')  # Minus sign
+
+    # Various Unicode spaces → regular space
+    text = text.replace('\u00A0', ' ')  # Non-breaking space
+    text = text.replace('\u2000', ' ')  # En quad
+    text = text.replace('\u2001', ' ')  # Em quad
+    text = text.replace('\u2002', ' ')  # En space
+    text = text.replace('\u2003', ' ')  # Em space
+    text = text.replace('\u2004', ' ')  # Three-per-em space
+    text = text.replace('\u2005', ' ')  # Four-per-em space
+    text = text.replace('\u2006', ' ')  # Six-per-em space
+    text = text.replace('\u2007', ' ')  # Figure space
+    text = text.replace('\u2008', ' ')  # Punctuation space
+    text = text.replace('\u2009', ' ')  # Thin space
+    text = text.replace('\u200A', ' ')  # Hair space
+    text = text.replace('\u202F', ' ')  # Narrow no-break space
+    text = text.replace('\u205F', ' ')  # Medium mathematical space
+    text = text.replace('\u3000', ' ')  # Ideographic space
+    
+    # Ellipsis → ...
+    text = text.replace('\u2026', '...')
+    
+    # Arrows → ASCII equivalents
+    text = text.replace('\u2192', '->')   # → Rightwards arrow
+    text = text.replace('\u2190', '<-')   # ← Leftwards arrow
+    text = text.replace('\u2191', '^')    # ↑ Upwards arrow
+    text = text.replace('\u2193', 'v')    # ↓ Downwards arrow
+    text = text.replace('\u2194', '<->')  # ↔ Left right arrow
+    text = text.replace('\u21D2', '=>')   # ⇒ Rightwards double arrow
+    text = text.replace('\u21D0', '<=')   # ⇐ Leftwards double arrow
+    text = text.replace('\u21D4', '<=>') # ⇔ Left right double arrow
+    text = text.replace('\u2794', '->')   # ➔ Heavy wide-headed rightwards arrow
+    text = text.replace('\u279C', '->')   # ➜ Heavy round-tipped rightwards arrow
+    text = text.replace('\u279E', '->')   # ➞ Heavy triangle-headed rightwards arrow
+    text = text.replace('\u27A1', '->')   # ➡ Black rightwards arrow
+    text = text.replace('\u27F6', '->')   # ⟶ Long rightwards arrow
+    text = text.replace('\u27F5', '<-')   # ⟵ Long leftwards arrow
+    text = text.replace('\u27F7', '<->')  # ⟷ Long left right arrow
+    text = text.replace('\u2B95', '->')   # ⮕ Rightwards black arrow
+    text = text.replace('\u2B05', '<-')   # ⬅ Leftwards black arrow
+    text = text.replace('\u2B06', '^')    # ⬆ Upwards black arrow
+    text = text.replace('\u2B07', 'v')    # ⬇ Downwards black arrow
+    
+    return text
+
+def parse_rephrased_questions(response: str) -> list:
+    """
+    Parses a string response of the form:
+    Question Rephrase 1: <question>
+    Answer Rephrase 1: <answer>
+    ...
+    Question Rephrase 5: <question>
+    Answer Rephrase 5: <answer>
+
+    (No seperator)
+    """
+
+    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+    response = response.strip()
+    questions = []
+    answers = []
+    for line in response.split("\n"):
+        if line.startswith("Question Rephrase"):
+            questions.append(line.split(":", 1)[1].strip())
+        elif line.startswith("Answer Rephrase"):
+            answers.append(line.split(":", 1)[1].strip())
+        
+    if len(questions) != len(answers):
+        return []
+
+    # return list(zip(questions, answers))
+    return [{"question": questions, "answer": answers} for questions, answers in zip(questions, answers)]
+
+async def paraphrase_question_and_answer(question: str, answer: str, model: str) -> list:
+    question = normalize_unicode_to_normal(question)
+    answer = normalize_unicode_to_normal(answer)
+
+    async with OpenAIClient() as client:
+        import time
+        start_time = time.time()
+        response = await client.simple_text_completion(
+            model=model,
+            system_prompt=rephrase_prompt,
+            prompt=f"Question: {question}\nAnswer: {answer}",
+            max_completion_tokens=8192,
+            temperature=1,
+            top_p=0.99,
+        )
+        end_time = time.time()
+        print(f"Time taken: {(end_time - start_time):.2f} seconds for model {model}")
+
+        text_resp = client.extract_text_from_response(response)
+        paraphrased = parse_rephrased_questions(text_resp)
+        some_normalized = [{"question": question, "answer": answer}]
+
+        for row in paraphrased:
+            some_normalized.append({
+                "question": normalize_unicode_to_normal(row["question"]),
+                "answer": normalize_unicode_to_normal(row["answer"])
+            })
+
+        return some_normalized
+
 async def general_all_prompts(contexts: list[Context], models: list[str], prompt_styles: list[str]):
     requests = []
     for model in models:
@@ -219,7 +372,15 @@ async def general_all_prompts(contexts: list[Context], models: list[str], prompt
             requests.append(synth_data)
     
     result = await asyncio.gather(*requests)
-    return result
+    rephrased_result = await asyncio.gather(*[paraphrase_question_and_answer(row["question"], row["answer"], "openai/gpt-oss-20b") for model_value in result for row in model_value])
+
+    all_samples = []
+    for row in rephrased_result:
+        for qa_pair in row:
+            if qa_pair["question"] and qa_pair["answer"]:
+                all_samples.append(qa_pair)
+
+    return all_samples
 
 if __name__ == "__main__":
     dotenv.load_dotenv()
