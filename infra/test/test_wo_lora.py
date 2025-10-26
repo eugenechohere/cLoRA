@@ -9,9 +9,9 @@ client = OpenAI(
 #         151645: AddedToken("<|im_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
 # ****Change model_id
 response = client.chat.completions.create(
-    model="89165820-a",
+    model="11213293-b",
     messages=[
-        {"role": "user", "content": "hm... do you know when Eugene moved from YouTube to Slack, and what was the initial Slack view?"}
+        {"role": "user", "content": "hey hey, do you know which  text Eugene highlighte in the expanded description, and what might that suggest?"}
     ],
     extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     temperature=0.05,

@@ -1,3 +1,6 @@
+import functools
+print = functools.partial(print, flush=True)
+
 import os
 import subprocess
 import requests
