@@ -80,7 +80,7 @@ async def run_evaluation():
     contexts = []
 
     async with OpenAIClient() as client:
-        dir = "imgs/eval"
+        dir = "datagen/imgs/eval"
         chunk_size = 3
         max_conv_chatbot_turns = 6
 
@@ -130,7 +130,7 @@ async def run_evaluation():
         "meta-llama/llama-4-maverick-17b-128e-instruct",
         "qwen/qwen3-32b",
     ]
-    result = await general_all_prompts(contexts, models, PROMPT_FRAGMENTS)
+    result = await general_all_prompts(contexts, models, PROMPT_FRAGMENTS, repeats=10)
     json.dump(result, open("synth_data.json", "w"))
 
 
