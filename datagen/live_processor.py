@@ -4,6 +4,7 @@ from typing import Callable, Optional, List
 import os
 import dotenv
 import threading
+import json
 
 from screenshot_testing import ScreenshotCapture
 from models import OpenAIClient, ConversationManager
@@ -107,13 +108,17 @@ class LiveDataProcessor(ScreenshotCapture):
         # Queue for processing batches of screenshots (no data loss)
         self.screenshot_queue: Optional[asyncio.Queue] = None
         
+        # Queue for synthetic data generation (runs independently)
+        self.synth_data_queue: Optional[asyncio.Queue] = None
+        
         # For context generation
         self.client: Optional[OpenAIClient] = None
         self.conversation: Optional[ConversationManager] = None
         
-        # Event loop and worker task
+        # Event loop and worker tasks
         self.loop = None
-        self.worker_task = None
+        self.screenshot_worker_task = None
+        self.synth_data_worker_task = None
         self.stop_event = threading.Event()
         
     async def initialize_async(self):
@@ -125,17 +130,32 @@ class LiveDataProcessor(ScreenshotCapture):
         # Create the queue for screenshot batches
         self.screenshot_queue = asyncio.Queue()
         
-        # Start the worker task that processes the queue
-        self.worker_task = asyncio.create_task(self.process_queue_worker())
-        print("[LiveProcessor] Worker task started")
+        # Create the queue for synthetic data generation
+        self.synth_data_queue = asyncio.Queue()
+        
+        # Start the screenshot processing worker task
+        self.screenshot_worker_task = asyncio.create_task(self.process_screenshot_queue_worker())
+        print("[LiveProcessor] Screenshot worker task started")
+        
+        # Start the synthetic data generation worker task
+        self.synth_data_worker_task = asyncio.create_task(self.process_synth_data_queue_worker())
+        print("[LiveProcessor] Synthetic data worker task started")
         
     async def cleanup_async(self):
         """Clean up async components."""
-        # Stop the worker task
-        if self.worker_task:
-            self.worker_task.cancel()
+        # Stop the screenshot worker task
+        if self.screenshot_worker_task:
+            self.screenshot_worker_task.cancel()
             try:
-                await self.worker_task
+                await self.screenshot_worker_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Stop the synthetic data worker task
+        if self.synth_data_worker_task:
+            self.synth_data_worker_task.cancel()
+            try:
+                await self.synth_data_worker_task
             except asyncio.CancelledError:
                 pass
         
@@ -169,9 +189,9 @@ class LiveDataProcessor(ScreenshotCapture):
                     self.loop
                 )
     
-    async def process_queue_worker(self):
+    async def process_screenshot_queue_worker(self):
         """Worker task that continuously processes screenshot batches from the queue."""
-        print("[LiveProcessor] Queue worker started")
+        print("[LiveProcessor] Screenshot queue worker started")
         
         while not self.stop_event.is_set():
             try:
@@ -190,14 +210,44 @@ class LiveDataProcessor(ScreenshotCapture):
                 self.screenshot_queue.task_done()
                 
             except asyncio.CancelledError:
-                print("[LiveProcessor] Queue worker cancelled")
+                print("[LiveProcessor] Screenshot queue worker cancelled")
                 break
             except Exception as e:
-                print(f"[LiveProcessor] Error in queue worker: {e}")
+                print(f"[LiveProcessor] Error in screenshot queue worker: {e}")
                 import traceback
                 traceback.print_exc()
         
-        print("[LiveProcessor] Queue worker stopped")
+        print("[LiveProcessor] Screenshot queue worker stopped")
+    
+    async def process_synth_data_queue_worker(self):
+        """Worker task that continuously processes synthetic data generation from the queue."""
+        print("[LiveProcessor] Synth data queue worker started")
+        
+        while not self.stop_event.is_set():
+            try:
+                # Wait for a context batch from the queue (with timeout to allow checking stop_event)
+                try:
+                    contexts_to_process = await asyncio.wait_for(self.synth_data_queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                
+                print(f"[LiveProcessor] Generating synthetic data from {len(contexts_to_process)} contexts (from synth queue)...")
+                
+                # Generate synthetic data from this batch of contexts
+                await self.generate_synthetic_data(contexts_to_process)
+                
+                # Mark task as done
+                self.synth_data_queue.task_done()
+                
+            except asyncio.CancelledError:
+                print("[LiveProcessor] Synth data queue worker cancelled")
+                break
+            except Exception as e:
+                print(f"[LiveProcessor] Error in synth data queue worker: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        print("[LiveProcessor] Synth data queue worker stopped")
     
     async def process_screenshot_batch(self, screenshots_to_process: List[str]):
         """Process a batch of screenshots to create a Context chunk."""
@@ -244,38 +294,41 @@ class LiveDataProcessor(ScreenshotCapture):
             # Add to contexts (sliding window)
             self.contexts.append(context)
             
-            # Check if we should generate synthetic data
+            # Check if we should enqueue synthetic data generation
             should_generate = False
             
             if len(self.contexts) == self.context_window_size:
                 # First time we have enough contexts
-                print(f"[LiveProcessor] Reached {self.context_window_size} contexts. Starting synthetic data generation...")
+                print(f"[LiveProcessor] Reached {self.context_window_size} contexts. Enqueuing for synthetic data generation...")
                 should_generate = True
             elif len(self.contexts) > self.context_window_size:
                 # Sliding window: drop the oldest context
                 self.contexts = self.contexts[-self.context_window_size:]
-                print(f"[LiveProcessor] Sliding window: keeping last {self.context_window_size} contexts")
+                print(f"[LiveProcessor] Sliding window: keeping last {self.context_window_size} contexts. Enqueuing for synthetic data generation...")
                 should_generate = True
             else:
                 print(f"[LiveProcessor] Have {len(self.contexts)}/{self.context_window_size} contexts. Waiting for more...")
             
-            # Generate synthetic data if we have enough contexts
+            # Enqueue synthetic data generation if we have enough contexts (non-blocking)
             if should_generate:
-                await self.generate_synthetic_data()
+                # Make a copy of the current contexts to pass to the synth data queue
+                contexts_copy = self.contexts.copy()
+                await self.synth_data_queue.put(contexts_copy)
+                print(f"[LiveProcessor] Enqueued {len(contexts_copy)} contexts for synthetic data generation (synth queue size: {self.synth_data_queue.qsize()})")
         
         except Exception as e:
             print(f"[LiveProcessor] Error processing screenshot batch: {e}")
             import traceback
             traceback.print_exc()
     
-    async def generate_synthetic_data(self):
-        """Generate synthetic Q&A data from current context window."""
-        print(f"\n[LiveProcessor] Generating synthetic data from {len(self.contexts)} contexts...")
+    async def generate_synthetic_data(self, contexts: List[Context]):
+        """Generate synthetic Q&A data from given context window."""
+        print(f"\n[LiveProcessor] Generating synthetic data from {len(contexts)} contexts...")
         
         try:
             # Generate Q&A pairs
             result = await general_all_prompts(
-                self.contexts,
+                contexts,
                 self.qa_models,
                 self.prompt_fragments,
                 repeats=self.repeats
@@ -378,11 +431,11 @@ class LiveDataProcessor(ScreenshotCapture):
             print(f"Total data points generated: {len(self.all_generated_data)}")
             print(f"Generation batches completed: {self.generation_batch_count}")
             if self.screenshot_queue:
-                print(f"Items remaining in queue: {self.screenshot_queue.qsize()}")
+                print(f"Screenshot batches remaining in queue: {self.screenshot_queue.qsize()}")
+            if self.synth_data_queue:
+                print(f"Synth data batches remaining in queue: {self.synth_data_queue.qsize()}")
             print(f"{'='*80}\n")
 
-
-import json
 
 index = 0
 async def example_callback(data: List[dict]):
