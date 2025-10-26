@@ -1,32 +1,89 @@
 from __future__ import annotations
 
 import json
+import random
+import re
+import subprocess
+import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import requests
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 RECENT_EXAMPLES_PATH = DATA_DIR / "recent_examples.jsonl"
+WORKFLOW_LOG_PATH = Path("/home/ubuntu/calhacks-continual-learning/infra/workflow.log")
 
 # Single source of truth for batch size
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 TRAIN_TRIGGER_THRESHOLD = BATCH_SIZE
 TRAINING_SERVICE_URL = "http://0.0.0.0:8001/train-and-update"
 VLLM_URL = "http://0.0.0.0:8000/v1/completions"
 
+# Global variable to store latest loss (updated by background thread)
+# No lock needed - reading/writing a float in Python is atomic
+latest_loss_value: Optional[float] = None
+
 app = FastAPI()
+
+
+def tail_log_file():
+    """Background thread that tails the log file and updates latest_loss_value."""
+    global latest_loss_value
+    
+    if not WORKFLOW_LOG_PATH.exists():
+        print(f"Warning: Log file {WORKFLOW_LOG_PATH} does not exist. Loss monitoring disabled.")
+        return
+    
+    pattern = r"\{'loss':\s*([\d.]+)"
+    
+    try:
+        # Start tail -f process
+        process = subprocess.Popen(
+            ["tail", "-f", "-n", "100", str(WORKFLOW_LOG_PATH)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True
+        )
+        
+        print(f"Started tailing log file: {WORKFLOW_LOG_PATH}")
+        
+        # Read lines as they come
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            match = re.search(pattern, line)
+            if match:
+                loss_val = float(match.group(1))
+                latest_loss_value = loss_val  # Atomic write in Python
+                print(f"Updated loss: {loss_val}", flush=True)
+                
+    except Exception as e:
+        print(f"Error in tail_log_file: {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the background thread when FastAPI starts."""
+    thread = threading.Thread(target=tail_log_file, daemon=True)
+    thread.start()
+    print("Background log tailer started")
 
 class InferenceRequest(BaseModel):
     prompt: str
 
 @app.post("/upload")
-async def upload_example(payloads: List[Dict[str, str]] = Body(...)) -> Dict[str, Any]:
+async def upload_example(
+    payloads: List[Dict[str, str]] = Body(...),
+    background_tasks: BackgroundTasks = None,
+) -> Dict[str, Any]:
     """
     Append prompt/completion pairs and, whenever possible, emit as many full
     BATCH_SIZE training files as can be formed (each exactly BATCH_SIZE examples),
@@ -46,9 +103,13 @@ async def upload_example(payloads: List[Dict[str, str]] = Body(...)) -> Dict[str
         print(train_files, remaining)
         
 
-        # Fire independent requests (no interactions among them)
+        # Fire-and-forget training requests in background to avoid blocking the server
         for batch_path in train_files:
-            _trigger_training(batch_path)
+            if background_tasks is not None:
+                background_tasks.add_task(_trigger_training, batch_path)
+            else:
+                # Fallback (shouldn't happen in FastAPI) – run synchronously
+                _trigger_training(batch_path)
 
         total_after_append = remaining
 
@@ -75,10 +136,11 @@ def _trigger_training(train_file: Path) -> bool:
         json={
             "data_path": str(train_file),
         },
-        timeout=60,  # 10 minutes - training can take a while
+        timeout=300,  # 10 minutes - training can take a while
     )
     response.raise_for_status()
     data = response.json()
+    print(data)
     return data
 
 
@@ -150,6 +212,63 @@ def _prepare_training_batches(path: Path, batch_size: int) -> Tuple[List[Path], 
     return batch_files, remainder_count
 
 
+@app.get("/get_data")
+async def get_data(samples_per_batch: int = 10) -> List[List[Dict[str, Any]]]:
+    """
+    Returns randomly sampled data from finalized training batches only.
+    
+    Args:
+        samples_per_batch: Number of samples to randomly select from each batch (default: 10)
+    
+    Returns:
+        List of lists, where each inner list contains N random samples from a batch.
+        Example: [[sample1, sample2, ...], [sample1, sample2, ...], ...]
+    """
+    result = []
+    
+    # Get all train_batch files sorted by timestamp (latest first)
+    batch_files = sorted(
+        DATA_DIR.glob("train_batch_*.jsonl"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True  # Latest first
+    )
+ 
+    # For each batch file, read all data and randomly sample N examples
+    for batch_file in batch_files:
+        batch_data = []
+        with batch_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        batch_data.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        
+        # Randomly sample examples from this batch (or all if less than requested)
+        sample_size = min(samples_per_batch, len(batch_data))
+        if sample_size > 0:
+            sampled = random.sample(batch_data, sample_size)
+            result.append(sampled)
+    
+    return result
+
+
+@app.get("/latest_loss")
+async def get_latest_loss() -> Dict[str, Any]:
+    """
+    Returns the latest loss value from memory (updated by background tail process).
+    This is instant - no file I/O on each request!
+    
+    Returns:
+        {"loss": float} - The most recent loss value from training
+    """
+    if latest_loss_value is None:
+        raise HTTPException(status_code=404, detail="No loss value available yet")
+    
+    return {"loss": latest_loss_value}
+
+
 @app.post("/infer")
 async def infer(request: InferenceRequest):
     payload = {
@@ -160,7 +279,7 @@ async def infer(request: InferenceRequest):
     }
 
     try:
-        resp = requests.post(VLLM_URL, json=payload, timeout=120)
+        resp = requests.post(VLLM_URL, json=payload, timeout=300)
         resp.raise_for_status()
         data = resp.json()
         return {"output": data["choices"][0]["text"]}
