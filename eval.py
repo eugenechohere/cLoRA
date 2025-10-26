@@ -2,6 +2,11 @@ from typing import Tuple
 from models import OpenAIClient
 from glob import glob
 from models import OpenAIClient, ConversationManager
+from generate_synth_data import Context, general_all_prompts, PROMPT_FRAGMENTS
+from datetime import datetime
+import os
+import json
+import asyncio 
 
 class JudgeValidator:
     """
@@ -67,9 +72,12 @@ Are these two values equivalent in meaning? Respond with only "YES" or "NO"."""
         return (is_equal, "model-judge")
 
 
+PROMPT = ""
+
+
 async def run_evaluation():
 
-    chunks = []
+    contexts = []
 
     async with OpenAIClient() as client:
         dir = "imgs/eval"
@@ -87,9 +95,9 @@ async def run_evaluation():
         for i in range(0, len(image_paths), chunk_size):
             images = image_paths[i:i + chunk_size]
 
-            text = "Provided is a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context including any relevant text present. Just give the description without any other chatty text."
+            text = "Provided is a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context including any relevant text present and UI elements that are present and deemed relevant to jot down. Please be as explicit and descriptive and verbose as possible about the current context. Just give the description without any other chatty text."
             if i != 0:
-                text = "Here is a continuation of the previous sequence of actions, provided as a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context, including any relevant text present. In your description, do not repeat information or nuances that have already been mentioned in previous turns. Only describe new actions or changes that have been taken since."
+                text = "Here is a continuation of the previous sequence of actions, provided as a sequence of frames of a screen. Describe all the actions that are taken throughout the frames, without mentioning frames specifically. Please be as descriptive as possible about all the actions taken and changes that are made so that all the necessary context can be included in the description without sounding overbearing. Please be descriptive and explicit about the specific nuances in the context, including any relevant text present UI elements that are present and deemed relevant to jot down. Please be as explicit and descriptive and verbose as possible about the current context. In your description, do not repeat information or nuances that have already been mentioned in previous turns. Only describe new actions or changes that have been taken since."
 
             response = await conversation.send(
                 model="gpt-5-chat-latest",
@@ -107,4 +115,25 @@ async def run_evaluation():
             print(f"{client.extract_text_from_response(response)}")
             print("--------------------------------")
 
+            # Calculate average datetime from image file timestamps
+            image_timestamps = [os.path.getmtime(img_path) for img_path in images]
+            avg_timestamp = sum(image_timestamps) / len(image_timestamps)
+            avg_datetime = datetime.fromtimestamp(avg_timestamp)
+            
+            contexts.append(Context(time=avg_datetime, username="Eugene", content=client.extract_text_from_response(response)))
 
+
+
+    models = [
+        "openai/gpt-oss-120b",
+        "moonshotai/kimi-k2-instruct-0905",
+        "meta-llama/llama-4-maverick-17b-128e-instruct",
+        "qwen/qwen3-32b",
+    ]
+    result = await general_all_prompts(contexts, models, PROMPT_FRAGMENTS)
+    json.dump(result, open("synth_data.json", "w"))
+
+
+if __name__ == "__main__":
+
+    asyncio.run(run_evaluation())
