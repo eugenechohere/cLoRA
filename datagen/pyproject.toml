@@ -1,0 +1,16 @@
+[project]
+name = "calhacks-continual-learning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mss>=10.1.0",
+    "aiohttp>=3.9.0",
+    "pynput>=1.7.6",
+    "opencv-python>=4.8.0",
+    "pydantic>=2.12.3",
+    "dotenv>=0.9.9",
+    "ipykernel>=7.0.1",
+    "pandas>=2.3.3",
+]
