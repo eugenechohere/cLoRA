@@ -365,23 +365,25 @@ async def paraphrase_question_and_answer(question: str, answer: str, model: str)
 
         return some_normalized
 
-async def general_all_prompts(contexts: list[Context], models: list[str], prompt_styles: list[str]):
+async def general_all_prompts(contexts: list[Context], models: list[str], prompt_styles: list[str], repeats: int = 1):
     requests = []
-    for model in models:
-        for prompt_style in prompt_styles:
-            synth_data = generate_synth_data(contexts, model, prompt_style)
-            requests.append(synth_data)
+    for _ in range(repeats):
+        for model in models:
+            for prompt_style in prompt_styles:
+                synth_data = generate_synth_data(contexts, model, prompt_style)
+                requests.append(synth_data)
     
     result = await asyncio.gather(*requests)
-    rephrased_result = await asyncio.gather(*[paraphrase_question_and_answer(row["question"], row["answer"], "openai/gpt-oss-20b") for model_value in result for row in model_value])
 
-    all_samples = []
-    for row in rephrased_result:
-        for qa_pair in row:
-            if qa_pair["question"] and qa_pair["answer"]:
-                all_samples.append(qa_pair)
+    # rephrased_result = await asyncio.gather(*[paraphrase_question_and_answer(row["question"], row["answer"], "openai/gpt-oss-20b") for model_value in result for row in model_value])
 
-    return all_samples
+    # all_samples = []
+    # for row in rephrased_result:
+    #     for qa_pair in row:
+    #         if qa_pair["question"] and qa_pair["answer"]:
+    #             all_samples.append(qa_pair)
+
+    return [row for request in result for row in request]
 
 if __name__ == "__main__":
     dotenv.load_dotenv()
@@ -469,5 +471,5 @@ Overall, the single key action here is the **receipt of Jonathan Li’s reply**,
         "meta-llama/llama-4-maverick-17b-128e-instruct",
         "qwen/qwen3-32b",
     ]
-    result = asyncio.run(general_all_prompts(contexts, models, PROMPT_FRAGMENTS))
+    result = asyncio.run(general_all_prompts(contexts, models, PROMPT_FRAGMENTS, repeats=2))
     json.dump(result, open("synth_data.json", "w"))

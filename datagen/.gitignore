@@ -2,3 +2,5 @@
 .DS_Store
 
 __pycache__
+synth_data.json
+synth_data.csv
