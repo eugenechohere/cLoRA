@@ -173,8 +173,6 @@ class OpenAIClient:
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
-            "top_p": top_p,
             "frequency_penalty": frequency_penalty,
             "presence_penalty": presence_penalty,
             **kwargs

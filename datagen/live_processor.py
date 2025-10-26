@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import requests
 from typing import Callable, Optional, List
 import os
 import dotenv
@@ -123,7 +124,11 @@ class LiveDataProcessor(ScreenshotCapture):
         
     async def initialize_async(self):
         """Initialize async components."""
-        self.client = OpenAIClient()
+
+        if self.vlm_model == "claude-haiku-4-5":
+            self.client = OpenAIClient(api_key=os.environ["ANTHROPIC_API_KEY"], base_url="https://api.anthropic.com/v1")
+        else:
+            self.client = OpenAIClient()
         await self.client.__aenter__()
         self.conversation = ConversationManager(client=self.client)
         
@@ -458,6 +463,24 @@ async def example_callback(data: List[dict]):
 
     json.dump(data, open(f"output/result_{index}.json", "w"))
     index += 1
+
+    # @app.post("/upload")
+    # async def upload_example(payloads: List[Dict[str, str]] = Body(...)) -> Dict[str, Any]:
+    # https://8d01de42c0ff.ngrok-free.app/
+
+    # data = [{"prompt": item["question"], "completion": item["answer"]} for item in data]
+    # make the data go up to 256 rows
+    diff_from_256 = 256 - len(data)
+    if diff_from_256 > 0:
+        data.extend(data[:diff_from_256])
+    if diff_from_256 < 0:
+        data = data[:256]
+
+    result = requests.post("https://calhacks-monitor-backend.ngrok.pizza/upload", json=data, headers={
+        "Content-Type": "application/json", "ngrok-skip-browser-warning": "0"
+    })
+
+    print(result.json())
     
     print(f"\n{'='*80}\n")
 
@@ -467,7 +490,7 @@ if __name__ == "__main__":
     processor = LiveDataProcessor(
         username="Eugene",
         # vlm_model="gpt-5-chat-latest",
-        vlm_model="meta-llama/llama-4-maverick-17b-128e-instruct",
+        vlm_model="claude-haiku-4-5",
         qa_models=[
             "openai/gpt-oss-120b",
             "moonshotai/kimi-k2-instruct-0905",

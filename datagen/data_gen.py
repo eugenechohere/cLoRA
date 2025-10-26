@@ -12,10 +12,10 @@ TURN_PROMPT = "Here is a continuation of the previous sequence of actions, provi
 
 chunk_size = 3
 max_conv_chatbot_turns = 6
-dir = "datagen/imgs/eval"
+dir = "/Users/eugenecho/Documents/calhacks-continual-learning/datagen/imgs/eval"
 username = "Eugene"
 
-vlm_model = "gpt-5-chat-latest"
+vlm_model = "claude-sonnet-4-5"
 qa_models = [
     "openai/gpt-oss-120b",
     "moonshotai/kimi-k2-instruct-0905",
@@ -28,7 +28,7 @@ async def run_loop():
 
     contexts = []
 
-    async with OpenAIClient() as client:
+    async with OpenAIClient(api_key=os.environ["ANTHROPIC_API_KEY"], base_url="https://api.anthropic.com/v1") as client:
  
         conversation = ConversationManager(
             client=client,
@@ -85,8 +85,9 @@ async def main(num_parallel_runs: int = 1):
         
     json.dump(flattened_results, open("synth_data.json", "w"))
 
-
+import time
 if __name__ == "__main__":
-
-    asyncio.run(main(2))
+    start_time = time.time()
+    asyncio.run(main(3))
+    print(f"Time taken: {time.time() - start_time:.2f} seconds")
 

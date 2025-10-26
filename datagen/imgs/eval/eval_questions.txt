@@ -1,0 +1,20 @@
+What was the timestamp that I navigated to
+What were the subtitles of the video at the timestamp that i navigated to?
+How many likes on video
+What was the name of the user who’s comment I disliked
+What was the date that the video was uploaded
+How many comments were there
+Whats the name of video uploader
+What was the contents of the comment that I highlighted
+What was the title of the video
+How many subscribers did the youtuber have
+How many likes on the comment above the one that I disliked
+How many views does the video have
+Who was the author of the comment that I highlighted?
+Did I dislike the video ?
+Did I subscribe?
+What text did I highlight in the description?
+How long was the video total?
+How many days ago was the fourth recommended video on the side posted?
+How many replies did the first comment have?
+What was the button directly to the left of the download button?
